@@ -1,0 +1,15 @@
+import os
+import shutil
+from datetime import datetime
+
+def organizar_arquivos(base_path="."):
+    """
+    Organiza automaticamente os arquivos de um diretório com base na extensão.
+    - Cria pastas automaticamente (HTML, CSS, JS, Images, Outros, etc.)
+    - Move os arquivos para suas respectivas pastas.
+    - Gera um log com tudo que foi movido.
+    - Funciona recursivamente em subpastas.
+    """
+
+    # Extensões pré-definidas
+    pastas
