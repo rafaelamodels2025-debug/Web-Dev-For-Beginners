@@ -22,6 +22,21 @@ Follow these steps to get started using these resources:
 1. **Fork the Repository**: Click [![GitHub forks](https://img.shields.io/github/forks/microsoft/Web-Dev-For-beginners.svg?style=social&label=Fork)](https://GitHub.com/microsoft/Web-Dev-For-Beginners/fork)
 2. **Clone the Repository**:   `git clone https://github.com/microsoft/Web-Dev-For-Beginners.git`
 3. [**Join The Azure AI Foundry Discord and meet experts and fellow developers**](https://discord.com/invite/ByRwuEEgH4)
+import os
+import shutil
+from datetime import datetime
+
+def organizar_arquivos(base_path="."):
+    """
+    Organiza automaticamente os arquivos de um diretório com base na extensão.
+    - Cria pastas automaticamente (HTML, CSS, JS, Images, Outros, etc.)
+    - Move os arquivos para suas respectivas pastas.
+    - Gera um log com tudo que foi movido.
+    - Funciona recursivamente em subpastas.
+    """
+
+    # Extensões pré-definidas
+    pastas
 
 ### 🌐 Multi-Language Support
 
