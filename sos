@@ -1,0 +1,693 @@
+SENDERS = [send_via_satellite_real, send_via_internet, send_via_gsm_sms, send_via_lora, send_via_mesh]def receber_alerta(tipo_alerta):
+    if tipo_alerta in ["Blue Power", "Ultra Red Power"]:
+        gerar_imagem_IA(tipo_alerta)
+        enviar_alerta(tipo_alerta)
+
+def gerar_imagem_IA(tipo_alerta):
+    # Escolhe figurinha / GIF correto
+    if tipo_alerta == "Blue Power":
+        imagem = "anjinho_azul.gif"
+    else:
+        imagem = "anjinho_vermelho.gif"
+    return imagem
+
+def enviar_alerta(tipo_alerta):
+    imagem = gerar_imagem_IA(tipo_alerta)
+    mensagem = f"Alerta {tipo_alerta} acionado! — Anjinho da Guarda"
+    numero_efemero = gerar_numero_efemero()  # gera número temporário
+    enviar_whatsapp(mensagem, imagem, numero_efemero)
+    enviar_SMS_backup(mensagem, numero_efemero)
+
+def encerrar_caso(case_id):
+    # Mensagem ética
+    mensagem_final = "Pela ética, peço que a vítima não saiba que fui eu que passei as informações. — Anjinho da Guarda"
+    numero_efemero = gerar_numero_efemero()
+    enviar_whatsapp(mensagem_final, None, numero_efemero)
+    
+    # Limpeza segura
+    apagar_mensagens_whatsapp(numero_efemero)
+    apagar_mensagens_SMS(numero_efemero)
+    limpar_dados_temporarios(case_id)
+
+# Funções auxiliares
+def gerar_numero_efemero():
+    # Retorna um número temporário/virtual que expira depois do caso
+    return "numero_temp_1234"
+
+def apagar_mensagens_whatsapp(numero):
+    # Aqui você implementa a lógica para deletar mensagens via API
+    print(f"Mensagens do WhatsApp do número {numero} apagadas.")
+
+def apagar_mensagens_SMS(numero):
+    # Aqui você implementa a lógica para deletar mensagens SMS via API
+    print(f"Mensagens SMS do número {numero} apagadas.")# anjodaguarda_full.py
+"""
+Protótipo integrado: captura de sensores, buffer persistente, decisão de alerta,
+geração de variantes de imagem (Ultra Red / Violeta), número efêmero e envio stub.
+Substitua stubs por integração real (WhatsApp Business API, provider satelital, TTS).
+"""
+
+import os
+import json
+import time
+import random
+import hashlib
+import zipfile
+import uuid
+from datetime import datetime, timezone
+from collections import deque
+from typing import Dict
+
+# Imagem: Pillow
+from PIL import Image, ImageEnhance, ImageOps
+
+# ---------------- Config ----------------
+LOCAL_STORAGE = "./anjodaguarda_buffer/"
+os.makedirs(LOCAL_STORAGE, exist_ok=True)
+
+# Simulação de disponibilidade de canais (ajuste durante testes)
+network_state = {
+    "internet": True,
+    "gsm": True,
+    "satellite": True,
+    "lora": False,
+    "bluetooth_mesh": False
+}
+
+# ---------------- Utilitários ----------------
+def now_str():
+    return datetime.now(timezone.utc).isoformat()
+
+def safe_hash(s: bytes) -> str:
+    return hashlib.sha256(s).hexdigest()
+
+# ---------------- Buffer persistente ----------------
+class PersistentQueue:
+    def __init__(self, folder=LOCAL_STORAGE):
+        self.folder = folder
+        self.queue = deque()
+        self._load_from_disk()
+
+    def _load_from_disk(self):
+        for fname in sorted(os.listdir(self.folder)):
+            if fname.endswith(".buf"):
+                path = os.path.join(self.folder, fname)
+                try:
+                    with open(path, "rb") as f:
+                        raw = f.read()
+                    item = json.loads(raw.decode("utf-8"))
+                    self.queue.append((item, path))
+                except Exception:
+                    continue
+
+    def push(self, item: dict):
+        item["_meta"] = {"created_at": now_str()}
+        raw = json.dumps(item, ensure_ascii=False).encode("utf-8")
+        ts = int(time.time()*1000)
+        fname = f"item_{ts}_{random.randint(0,9999)}.buf"
+        path = os.path.join(self.folder, fname)
+        with open(path, "wb") as f:
+            f.write(raw)
+        self.queue.append((item, path))
+        return path
+
+    def pop(self):
+        if not self.queue:
+            return None
+        item, path = self.queue.popleft()
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+        return item
+
+    def peek_all(self):
+        return [it for it, _ in list(self.queue)]
+
+buffer = PersistentQueue()
+
+# ----------------- Sensores Simulados / Estimator -----------------
+def get_gps():
+    if random.random() < 0.6:
+        return {"lat": -6.8 + random.uniform(-0.002,0.002),
+                "lon": -38.1 + random.uniform(-0.002,0.002),
+                "accuracy_m": 5 + random.random()*10}
+    return None
+
+class PositionEstimator:
+    def __init__(self):
+        self.estimate = None
+
+    def update_with_gps(self, gps):
+        if gps:
+            self.estimate = (gps["lat"], gps["lon"])
+            return self.estimate
+        # fallback - tiny random walk (simulação)
+        if self.estimate:
+            lat, lon = self.estimate
+            lat += random.uniform(-1,1)*1e-5
+            lon += random.uniform(-1,1)*1e-5
+            self.estimate = (lat, lon)
+            return self.estimate
+        return None
+
+estimator = PositionEstimator()
+
+# ----------------- Senders (stubs) -----------------
+def send_via_internet(payload: dict):
+    if not network_state["internet"]:
+        raise ConnectionError("Internet indisponível")
+    print("[ENVIANDO INTERNET]", payload.get("tipo"), payload.get("event_id"))
+    return True
+
+def send_via_gsm_sms(payload: dict):
+    if not network_state["gsm"]:
+        raise ConnectionError("GSM indisponível")
+    print("[ENVIANDO GSM/SMS]", payload.get("tipo"), payload.get("event_id"))
+    return True
+
+def send_via_satellite_real(payload: dict):
+    if not network_state["satellite"]:
+        raise ConnectionError("Satélite indisponível")
+    print("[ENVIANDO SATÉLITE REAL]", payload.get("tipo"), payload.get("event_id"))
+    return True
+
+def send_via_lora(payload: dict):
+    if not network_state["lora"]:
+        raise ConnectionError("LoRa indisponível")
+    print("[ENVIANDO LORA]", payload.get("tipo"), payload.get("event_id"))
+    return True
+
+def send_via_mesh(payload: dict):
+    if not network_state["bluetooth_mesh"]:
+        raise ConnectionError("Mesh indisponível")
+    print("[ENVIANDO MESH]", payload.get("tipo"), payload.get("event_id"))
+    return True
+
+SENDERS = [send_via_satellite_real, send_via_internet, send_via_gsm_sms, send_via_lora, send_via_mesh]
+
+# ----------------- Forensics / pacote -----------------
+def create_forensic_package(event: dict, attachments: list, output_path="./package.zip"):
+    tmpdir = "./tmp_pkg"
+    os.makedirs(tmpdir, exist_ok=True)
+    ev_json_path = os.path.join(tmpdir, "event.json")
+    with open(ev_json_path, "w", encoding="utf-8") as f:
+        json.dump(event, f, ensure_ascii=False, indent=2)
+    for a in attachments:
+        src = a.get("path")
+        if src and os.path.exists(src):
+            dst = os.path.join(tmpdir, os.path.basename(src))
+            with open(src, "rb") as fr, open(dst, "wb") as fw:
+                fw.write(fr.read())
+    zipf = zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED)
+    zipf.write(ev_json_path, arcname="event.json")
+    zipf.close()
+    return output_path
+
+# ----------------- Core capture & retries -----------------
+def capturar_evento(tipo: str, extra: dict):
+    gps = get_gps()
+    pos = estimator.update_with_gps(gps)
+    evento = {
+        "event_id": str(uuid.uuid4()),
+        "tipo": tipo,
+        "ts": now_str(),
+        "pos": {"lat": pos[0], "lon": pos[1]} if pos else None,
+        "gps_raw": gps,
+        "extra": extra
+    }
+    path = buffer.push(evento)
+    print(f"[CAPTURADO] {tipo} -> {path}")
+    tentar_envio_retries()
+    return evento
+
+def tentar_envio_retries(max_attempts_per_item=3):
+    items = buffer.peek_all()
+    for item in items:
+        attempts = 0
+        sent = False
+        while attempts < max_attempts_per_item and not sent:
+            for sender in SENDERS:
+                try:
+                    sender(item)
+                    sent = True
+                    break
+                except ConnectionError:
+                    continue
+            attempts += 1
+            if not sent:
+                backoff = 2 ** attempts
+                print(f"[RETRY] falhou, backoff {backoff}s")
+                time.sleep(backoff)
+        if sent:
+            buffer.pop()
+            print("[OK] enviado e removido do buffer")
+        else:
+            print("[NOK] permanece no buffer")
+
+# ----------------- Image utilities (Pillow) -----------------
+def open_img(path):
+    img = Image.open(path).convert("RGBA")
+    return img
+
+def resize_square(img, size=512):
+    img = ImageOps.contain(img, (size, size))
+    canvas = Image.new("RGBA", (size, size), (0,0,0,0))
+    x = (size - img.width)//2
+    y = (size - img.height)//2
+    canvas.paste(img, (x,y), img)
+    return canvas
+
+def tint_image(img, tint_color=(255,0,0), strength=0.25):
+    color_layer = Image.new("RGBA", img.size, tint_color + (int(255*strength),))
+    blended = Image.alpha_composite(img, color_layer)
+    enhancer = ImageEnhance.Brightness(blended)
+    blended = enhancer.enhance(1.05)
+    return blended
+
+def generate_variants(input_path):
+    img = open_img(input_path)
+    img512 = resize_square(img, 512)
+    red = tint_image(img512, tint_color=(255,40,40), strength=0.20)
+    vio = tint_image(img512, tint_color=(150,50,200), strength=0.20)
+    azul = tint_image(img512, tint_color=(30,50,180), strength=0.20)
+    red_out = "anjinho_ultrared.png"
+    vio_out = "anjinho_violeta.png"
+    azul_out = "anjinho_azul.png"
+    red.save(red_out, format="PNG")
+    vio.save(vio_out, format="PNG")
+    azul.save(azul_out, format="PNG")
+    print("Gerados:", red_out, vio_out, azul_out)
+    # Comandos para converter para webp (use no terminal)
+    print("\nPara converter para WEBP (terminal):")
+    print("cwebp -q 95 anjinho_ultrared.png -o anjinho_ultrared.webp")
+    print("cwebp -q 95 anjinho_violeta.png -o anjinho_violeta.webp")
+    print("cwebp -q 95 anjinho_azul.png -o anjinho_azul.webp")
+    return [red_out, vio_out, azul_out]
+
+# ----------------- Number & messaging stubs -----------------
+def gerar_numero_efemero():
+    return f"+000{random.randint(100000,999999)}"
+
+def enviar_whatsapp(mensagem, imagem=None, numero=None):
+    # TODO: integrar com WhatsApp Business API provider
+    print(f"[WA SEND] {numero} | {mensagem} | asset={imagem}")
+
+def enviar_SMS_backup(mensagem, numero=None):
+    # TODO: integrar com Twilio/Nexmo
+    print(f"[SMS SEND] {numero} | {mensagem}")
+
+def apagar_mensagens_whatsapp(numero):
+    # TODO: provider-specific API to delete messages (if supported)
+    print(f"[APAGAR WA] {numero} (stub)")
+
+def apagar_mensagens_SMS(numero):
+    # TODO: provider-specific
+    print(f"[APAGAR SMS] {numero} (stub)")
+
+# ----------------- High-level alert API -----------------
+def gerar_imagem_IA(tipo_alerta):
+    if tipo_alerta == "Violeta Power":
+        return "anjinho_violeta.webp"
+    if tipo_alerta == "Blue Power":
+        return "anjinho_azul.webp"
+    return "anjinho_ultrared.webp"
+
+def enviar_alerta(tipo_alerta, extra=None):
+    imagem = gerar_imagem_IA(tipo_alerta)
+    mensagem = f"Alerta {tipo_alerta} acionado! — Anjinho da Guarda"
+    numero_efemero = gerar_numero_efemero()
+    enviar_whatsapp(mensagem, imagem, numero_efemero)
+    enviar_SMS_backup(mensagem, numero_efemero)
+    return numero_efemero
+
+def receber_alerta(tipo_alerta, extra=None):
+    if tipo_alerta in ["Violeta Power", "Blue Power", "Ultra Red Power"]:
+        evt = capturar_evento(tipo_alerta, extra or {})
+        num = enviar_alerta(tipo_alerta, extra)
+        return evt, num
+    else:
+        print("[WARN] alerta desconhecido:", tipo_alerta)
+        return None, None
+
+def encerrar_caso(case_id):
+    mensagem_final = "Pela ética, peço que a vítima não saiba que fui eu que passei as informações. — Anjinho da Guarda"
+    numero_efemero = gerar_numero_efemero()
+    enviar_whatsapp(mensagem_final, None, numero_efemero)
+    apagar_mensagens_whatsapp(numero_efemero)
+    apagar_mensagens_SMS(numero_efemero)
+    limpar_dados_temporarios(case_id)
+
+def limpar_dados_temporarios(case_id):
+    print(f"[CLEANUP] case {case_id} cleaned (stub)")
+
+# ----------------- Sensor fusion handler -----------------
+def compute_confidence(scores: Dict[str, float], weights=None) -> float:
+    if weights is None:
+        weights = {'vision':0.4, 'radar':0.3, 'audio':0.2, 'ble':0.1}
+    total = 0.0
+    for k,w in weights.items():
+        s = float(scores.get(k, 0.0))
+        total += s * w
+    return total
+
+def handle_sensor_event(sensor_payload: dict):
+    scores = sensor_payload.get("scores", {})
+    confidence = compute_confidence(scores)
+    high_sensors = sum(1 for v in scores.values() if v > 0.5)
+    summary = sensor_payload.get("summary","").lower()
+    print(f"[SENSOR] confidence={confidence:.2f} summary='{summary}'")
+
+    if confidence >= 0.90 and high_sensors >= 2:
+        # ameaça grave
+        extra = {"source":"sensor_gateway","summary":sensor_payload.get("summary"), "scores":scores, "pos":sensor_payload.get("pos")}
+        evt, num = receber_alerta("Ultra Red Power", extra)
+        if scores.get("vision",0) >= 0.8:
+            print("[ACTION] ativar corda energetica (condicional) - stub")
+    elif confidence >= 0.60 and high_sensors >= 2:
+        tipo = "Violeta Power" if any(k in summary for k in ["terreiro","relig","sagrado","kimbanda","umbanda","intoler"]) else "Blue Power"
+        evt, num = receber_alerta(tipo, {"source":"sensor_gateway","summary":sensor_payload.get("summary"), "scores":scores})
+    elif confidence >= 0.40:
+        print("[MONITOR] aumentar vigilância e logar evento")
+    else:
+        print("[IGNORAR] baixa confiança")
+
+# ----------------- Exemplo de execução -----------------
+if __name__ == "__main__":
+    print("=== AnjoDaGuarda Full Prototype ===")
+    # gerar variantes da sua imagem (substitua 'anjinho_input.png' pelo seu arquivo)
+    # generate_variants("anjinho_input.png")  # descomente quando tiver o arquivo
+
+    # Exemplo de sensor payload recebido do gateway
+    example_payload = {
+      "event_id": str(uuid.uuid4()),
+      "source": "sensor_gateway_001",
+      "tipo": "sensor_alert",
+      "ts": now_str(),
+      "scores": {"vision":0.9, "radar":0.82, "audio":0.7, "ble":0.0},
+      "summary": "Homem com objeto potencialmente perigoso se aproximando da entrada",
+      "pos": {"lat": -6.8001, "lon": -38.101}
+    }
+
+    handle_sensor_event(example_payload)
+
+    # Simular alert manual
+    receber_alerta("Ultra Red Power", {"descricao":"Gritos e objeto quebrando", "owner_id":"dona_001"})
+    time.sleep(0.5)
+    receber_alerta("Violeta Power", {"descricao":"Ameaças em terreiro", "owner_id":"dona_002"})
+    time.sleep(0.5)
+    receber_alerta("Blue Power", {"descricao":"Situação de atenção", "owner_id":"dona_003"})# anjodaguarda.py
+"""
+Protótipo: AnjoDaGuarda (simulação)
+- Offline-first, buffer persistente, dead-reckoning simples, múltiplos canais com backoff.
+- Pontos a substituir por produção: integração com GPS/IMU reais, keystore / Fernet key em produção,
+  endpoints reais de envio, handlers de erro mais robustos, logs estruturados.
+"""
+
+import os
+import json
+import time
+import random
+import hashlib
+import zipfile
+from datetime import datetime, timezone
+from collections import deque
+
+# Dependências opcionais
+try:
+    from cryptography.fernet import Fernet
+    CRYPTO_AVAILABLE = True
+except Exception:
+    CRYPTO_AVAILABLE = False
+
+# ---------- Config ----------
+LOCAL_STORAGE = "./anjodaguarda_buffer/"
+os.makedirs(LOCAL_STORAGE, exist_ok=True)
+
+# Preferir obter chave segura via variável de ambiente / keystore
+FERNET_KEY_ENV = os.environ.get("FERNET_KEY", None)
+if FERNET_KEY_ENV and CRYPTO_AVAILABLE:
+    FERNET = Fernet(FERNET_KEY_ENV.encode() if isinstance(FERNET_KEY_ENV, str) else FERNET_KEY_ENV)
+else:
+    FERNET = None  # fallback para pseudo criptografia (NÃO USAR em produção)
+
+# Simulação de disponibilidade de canais
+network_state = {
+    "internet": False,
+    "gsm": False,
+    "satellite": False,
+    "lora": False,
+    "bluetooth_mesh": False
+}
+
+# ---------- Utilitários ----------
+def now_str():
+    return datetime.now(timezone.utc).isoformat()
+
+def sha256_bytes(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+def payload_summary(p: dict):
+    return {
+        "tipo": p.get("tipo"),
+        "ts": p.get("ts"),
+        "pos": p.get("pos"),
+        "submerso": p.get("submerso", False)
+    }
+
+def safe_encrypt_bytes(raw: bytes) -> bytes:
+    """Usa Fernet se disponível; caso contrário, usa um pseudo método (para simulação)."""
+    if FERNET:
+        return FERNET.encrypt(raw)
+    # simulação (NÃO SEGURO)
+    return b"ENC:" + raw[::-1]
+
+def safe_decrypt_bytes(enc: bytes) -> bytes:
+    if FERNET:
+        return FERNET.decrypt(enc)
+    if enc.startswith(b"ENC:"):
+        return enc[4:][::-1]
+    return enc
+
+# ---------- Buffer persistente ----------
+class PersistentQueue:
+    def __init__(self, folder=LOCAL_STORAGE):
+        self.folder = folder
+        self.queue = deque()
+        self._load_from_disk()
+
+    def _load_from_disk(self):
+        for fname in sorted(os.listdir(self.folder)):
+            if fname.endswith(".buf"):
+                path = os.path.join(self.folder, fname)
+                try:
+                    with open(path, "rb") as f:
+                        enc = f.read()
+                    raw = safe_decrypt_bytes(enc)
+                    item = json.loads(raw.decode("utf-8"))
+                    self.queue.append((item, path))
+                except Exception:
+                    # arquivo corrompido ou chave errada -> ignorar
+                    continue
+
+    def push(self, item: dict):
+        item["_meta"] = {"created_at": now_str()}
+        raw = json.dumps(item, ensure_ascii=False).encode("utf-8")
+        enc = safe_encrypt_bytes(raw)
+        ts = int(time.time()*1000)
+        fname = f"item_{ts}_{random.randint(0,9999)}.buf"
+        path = os.path.join(self.folder, fname)
+        with open(path, "wb") as f:
+            f.write(enc)
+        self.queue.append((item, path))
+        return path
+
+    def pop(self):
+        if not self.queue:
+            return None
+        item, path = self.queue.popleft()
+        try:
+            if os.path.exists(path):
+                os.remove(path)
+        except Exception:
+            pass
+        return item
+
+    def peek_all(self):
+        return [it for it, _ in list(self.queue)]
+
+buffer = PersistentQueue()
+
+# ---------- Sensores simulados ----------
+def get_gps():
+    """Retorna dict (lat, lon, accuracy) ou None"""
+    if random.random() < 0.6:
+        return {"lat": -6.8 + random.uniform(-0.002,0.002),
+                "lon": -38.1 + random.uniform(-0.002,0.002),
+                "accuracy_m": 5 + random.random()*10}
+    return None
+
+def get_imu_delta():
+    return {"dx_m": random.uniform(-1,1), "dy_m": random.uniform(-1,1)}
+
+def sensor_submersed():
+    return random.random() < 0.05
+
+# ---------- Estimador de posição (dead-reckoning simples) ----------
+class PositionEstimator:
+    def __init__(self):
+        self.estimate = None
+
+    def update_with_gps(self, gps):
+        if gps:
+            self.estimate = (gps["lat"], gps["lon"])
+            return self.estimate
+        if self.estimate:
+            delta = get_imu_delta()
+            lat, lon = self.estimate
+            lat += delta["dx_m"] * 1e-5
+            lon += delta["dy_m"] * 1e-5
+            self.estimate = (lat, lon)
+            return self.estimate
+        return None
+
+estimator = PositionEstimator()
+
+# ---------- Stubs de envio (substituir por implementação real) ----------
+def send_via_internet(payload: dict):
+    if not network_state["internet"]:
+        raise ConnectionError("Internet indisponível")
+    print("[ENVIANDO] internet:", payload_summary(payload))
+    return True
+
+def send_via_gsm_sms(payload: dict):
+    if not network_state["gsm"]:
+        raise ConnectionError("GSM indisponível")
+    print("[ENVIANDO] gsm/sms:", payload_summary(payload))
+    return True
+
+def send_via_satellite(payload: dict):
+    if not network_state["satellite"]:
+        raise ConnectionError("satélite indisponível")
+    print("[ENVIANDO] satélite:", payload_summary(payload))
+    return True
+
+def send_via_lora(payload: dict):
+    if not network_state["lora"]:
+        raise ConnectionError("lora indisponível")
+    print("[ENVIANDO] lora:", payload_summary(payload))
+    return True
+
+def send_via_mesh(payload: dict):
+    if not network_state["bluetooth_mesh"]:
+        raise ConnectionError("mesh indisponível")
+    print("[ENVIANDO] mesh:", payload_summary(payload))
+    return True
+
+SENDERS = [send_via_internet, send_via_gsm_sms, send_via_satellite, send_via_lora, send_via_mesh]
+
+# ---------- Forensics / pacote ----------
+def create_forensic_package(event: dict, attachments: list, output_path="./package.zip"):
+    tmpdir = "./tmp_pkg"
+    os.makedirs(tmpdir, exist_ok=True)
+    ev_json_path = os.path.join(tmpdir, "event.json")
+    with open(ev_json_path, "w", encoding="utf-8") as f:
+        json.dump(event, f, ensure_ascii=False, indent=2)
+    attached_files = []
+    for a in attachments:
+        src = a.get("path")
+        if src and os.path.exists(src):
+            basename = os.path.basename(src)
+            dst = os.path.join(tmpdir, basename)
+            with open(src, "rb") as fr, open(dst, "wb") as fw:
+                fw.write(fr.read())
+            attached_files.append(dst)
+    zipf = zipfile.ZipFile(output_path, 'w', zipfile.ZIP_DEFLATED)
+    zipf.write(ev_json_path, arcname="event.json")
+    for fpath in attached_files:
+        zipf.write(fpath, arcname=os.path.basename(fpath))
+    zipf.close()
+    # criptografar zip
+    with open(output_path, "rb") as fin:
+        data = fin.read()
+    enc = safe_encrypt_bytes(data)
+    enc_path = output_path + ".enc"
+    with open(enc_path, "wb") as fout:
+        fout.write(enc)
+    # limpar tmpdir se quiser (opcional)
+    return enc_path
+
+# ---------- Core: captura de evento e tentativa de envio com retries ----------
+def capturar_evento(tipo: str, extra: dict):
+    gps = get_gps()
+    pos = estimator.update_with_gps(gps)
+    submerso = sensor_submersed()
+    evento = {
+        "tipo": tipo,
+        "ts": now_str(),
+        "pos": {"lat": pos[0], "lon": pos[1]} if pos else None,
+        "gps_raw": gps,
+        "submerso": submerso,
+        "extra": extra
+    }
+    path = buffer.push(evento)
+    print(f"[CAPTURADO] evento armazenado em buffer: {path} (submerso={submerso})")
+    tentar_envio_retries()
+    return evento
+
+def tentar_envio_retries(max_attempts_per_item=3):
+    # snapshot para evitar mutação enquanto itera
+    items = buffer.peek_all()
+    for item in items:
+        attempts = 0
+        sent = False
+        while attempts < max_attempts_per_item and not sent:
+            for sender in SENDERS:
+                try:
+                    sender(item)
+                    sent = True
+                    break
+                except ConnectionError:
+                    continue
+            attempts += 1
+            if not sent:
+                backoff = 2 ** attempts
+                print(f"[RETRY] envio falhou, aguardando {backoff}s")
+                time.sleep(backoff)
+        if sent:
+            buffer.pop()
+            print("[OK] Item enviado e removido do buffer")
+        else:
+            print("[NOK] Item permanece no buffer para retry futuro")
+
+# ---------- Rede monitor (simulação) ----------
+def network_monitor_simulation(timesteps=20):
+    for t in range(timesteps):
+        network_state["internet"] = random.random() < 0.3
+        network_state["gsm"] = random.random() < 0.25
+        network_state["satellite"] = random.random() < 0.05
+        network_state["lora"] = random.random() < 0.15
+        network_state["bluetooth_mesh"] = random.random() < 0.2
+        print(f"\n[TIME] passo {t} - rede: {network_state}")
+        tentar_envio_retries()
+        time.sleep(1)
+
+# ---------- Resumo curto (SMS / sat) ----------
+def prepare_short_report(event: dict) -> str:
+    latlon = event.get("pos")
+    ts = event.get("ts")
+    typ = event.get("tipo")
+    pkg_hash = event.get("_pkg_hash", "nohash")
+    short = f"TIPO:{typ};TS:{ts};POS:{latlon};H:{pkg_hash[:12]};ID:{event.get('event_id','noid')}"
+    return short
+
+# ---------- Execução de exemplo ----------
+if __name__ == "__main__":
+    print("=== AnjoDaGuarda (simulação) ===")
+    capturar_evento("sequestro_ou_ameaca_crianca", {"descricao": "Homem com jaqueta preta, levou a mão no bolso"})
+    time.sleep(0.5)
+    capturar_evento("violencia_domestica", {"descricao": "Gritos e objeto quebrando"})
+    time.sleep(0.5)
+    capturar_evento("intolerancia_religiosa", {"descricao": "Ameaças e símbolos ofensivos"})
+    network_monitor_simulation(timesteps=15)
